@@ -1,45 +1,32 @@
-import tkinter as tk
-from tkinter import ttk
-from tkinter.filedialog import asksaveasfile
-import serial
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
-from matplotlib import style
+import tkinter as tk
+import numpy as np
+import serial
+import os
+from tkinter import ttk
+from tkinter import messagebox
+from tkinter.filedialog import asksaveasfile
+from animation_function import animate
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
-import os
+from matplotlib import style
 from threading import Thread, Event
-import numpy as np
-from tkinter import messagebox
-from animation_function import animate
-
-# if "ser.write(b'0')" add 3 to 'cnt'
-# if "ser.write(b'1')" from 'cnt' subtract 2
-# if "ser.write(b'2')" reset 'cnt' to 0
 
 
-# def animate(i, file_name, f, a):
-#     pullData = open(file_name, "r").read()
-#     dataList = pullData.split('\n')
-#     xList = []
-#     yList = []
-#     for eachLine in dataList:
-#         if len(eachLine) > 1:
-#             x, y = eachLine.split(',')
-#             xList.append(int(x))
-#             yList.append(int(y.strip()))
-#     a[0].clear()
-#     if len(xList) == 0:
-#         a[0].set_ylim([-1, 1])
-#     else:
-#         a[0].set_ylim([-1, max(yList[-400:])+1])
-#     if len(xList) >= 400:
-#         a[0].plot(xList[-400:], yList[-400:])
-#     else:
-#         a[0].plot(xList, yList)
+def receive_cyclic_data(event: Event(), close_event: Event(), delete_data_event: Event(), cnt, ser: serial.Serial()):
+    """
+    Function receiving cyclic data from external sensor and saving it to temporary file. Data are stored in FIFO queue.
 
+    Parameters:
+        event - manages an internal flag that can be set to true or false. If set to True data are saving in "temp_data.txt" file.
+        close_event - -||-. If set to True, application end life and data are not saving.
+        delete_data_event - -||-. If set to True, clear "temp_data.txt" file.
+        cnt - counter, used to save index of data in "temp_data.txt"
+        ser - serial port
 
-def receive_cyclic_data(event, close_event, delete_data_event, cnt, ser):
+    """
+
     while True:
         if close_event.is_set():
             break
@@ -56,6 +43,7 @@ def receive_cyclic_data(event, close_event, delete_data_event, cnt, ser):
                     if data:
                         cnt += 1
                         file_data.write(f"{cnt}, {data}\n")
+                    file_data.close()
             else:
                 bytesWaiting = ser.inWaiting()
                 if (bytesWaiting != 0):
@@ -63,17 +51,27 @@ def receive_cyclic_data(event, close_event, delete_data_event, cnt, ser):
 
 
 def save_file():
+    """
+    Function saving data to .txt file
+    """
     f = asksaveasfile(initialfile="Untitled.txt", defaultextension=".txt", filetypes=[
                       ("All Files", "*.*"), ("Text documents", "*.txt*")])
     if f is None:
         return
-    text2save = open("temp_data.txt", "r")  # starts from `1.0`, not `0.0`
+    text2save = open("temp_data.txt", "r")
     for i in text2save:
         f.write(i)
     f.close()
 
 
-def delete_data(file_name, delete_data_event):
+def delete_data(file_name, delete_data_event: Event()):
+    """
+    Function deleting data from temporary file
+
+    Parameters:
+        file_name - name of temporary file.
+        delete_data_event - Event, used with other Threads to prevent racing.
+    """
     delete_data_event.set()
     data = open(file_name, "a")
     data.truncate(0)
@@ -81,18 +79,33 @@ def delete_data(file_name, delete_data_event):
 
 
 def add(ser):
+    """
+    Function writing to serial port '0' - adding '3' to micro controller variable
+    """
     ser.write(b'0')
 
 
 def subtract(ser):
+    """
+    Function writing to serial port '1' - subtracting '2' from micro controller variable
+    """
     ser.write(b'1')
 
 
 def reset(ser):
+    """
+    Function writing to serial port '2' - changing micro controller variable to '0'
+    """
     ser.write(b'2')
 
 
 def takeData(ser):
+    """
+    Function taking data from serial port (FIFO queue)
+
+    Return:
+        decoded value of sensor
+    """
     line = ser.readline()
     return line.decode('utf-8').strip()
 
